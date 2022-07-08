@@ -16,10 +16,19 @@ class CategoryController extends ApiController
     /**
      * @param Request $request
      */
-    public function getAll(Request $request)
+    public function getAll()
     {
         $categories=Category::all();
-        return $this->sendResponse($categories->toArray());
+        $rootCategories=$categories->whereNull('parent_id');
+        foreach($rootCategories as $rootCategory)
+        {
+            $rootCategory->children=$categories->where('parent_id', $rootCategory->id);
+            foreach($rootCategory->children as $child)
+            { 
+                $child->children=$categories->where('parent_id', $child->id);
+            }
+        }
+        return $this->sendResponse($rootCategories->toArray());
     }
 
 
@@ -68,8 +77,8 @@ class CategoryController extends ApiController
      */
     public function get(Request $request)
     {
-        $id=$request->get('id');
-        $category=Category::find($id);
+        $id = $request->get('id');
+        $category = Category::find($id);
         return $this->sendResponse($category->toArray());
     }
 
@@ -89,7 +98,7 @@ class CategoryController extends ApiController
                 return $this->sendError('Bad request!', $validator->messages()->toArray());
             }
 
-            $id=$request->get('id');
+            $id = $request->get('id');
             $name = $request->get('name');
             $parentId = $request->get('parent_id');
 
@@ -119,9 +128,9 @@ class CategoryController extends ApiController
      */
     public function delete(Request $request)
     {
-        $id=$request->get('id');
-        $category=Category::find($id);
+        $id = $request->get('id');
+        $category = Category::find($id);
         $category->delete();
-        return $this->sendResponse($category->delete(), 'Category with id '.$id. ' deleted');
+        return $this->sendResponse($category->delete(), 'Category with id ' . $id . ' deleted');
     }
 }
