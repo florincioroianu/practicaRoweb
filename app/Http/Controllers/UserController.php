@@ -56,6 +56,7 @@ class UserController extends ApiController
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            'name' => 'required|string',
             'email' => 'required|email',
             'password' => 'required'
         ]);
@@ -81,7 +82,8 @@ class UserController extends ApiController
         $user = new User;
         $user->name=$name;
         $user->email = $email;
-        $user->password = $password;
+        $user->password =$password;
+        $user->password = Hash::make('password');
         $user->email_verified_at=now();
         $user->remember_token=Str::random(10);
         $user->save();
