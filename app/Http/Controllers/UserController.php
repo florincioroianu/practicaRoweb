@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -55,6 +56,7 @@ class UserController extends ApiController
 
     public function register(Request $request)
     {
+        try{
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',
             'email' => 'required|email',
@@ -82,11 +84,15 @@ class UserController extends ApiController
         $user = new User;
         $user->name=$name;
         $user->email = $email;
-        $user->password =$password;
-        $user->password = Hash::make('password');
+        $user->password = Hash::make($password);
         $user->email_verified_at=now();
         $user->remember_token=Str::random(10);
         $user->save();
         return $this->sendResponse($user->toArray());
+    }catch(\Exception $exception){
+        Log::error($exception);
+
+            return $this->sendError('Something went wrong, please contact administrator!');
+    }
     }
 }
