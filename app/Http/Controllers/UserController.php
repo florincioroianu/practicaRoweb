@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Str;
 
 /**
@@ -20,7 +22,6 @@ use Illuminate\Support\Str;
  */
 class UserController extends ApiController
 {
-    
     public function login(Request $request): JsonResponse
     {
         try {
@@ -62,7 +63,6 @@ class UserController extends ApiController
         }
     }
 
-   
     public function register(Request $request): JsonResponse
     {
         try {
@@ -80,10 +80,14 @@ class UserController extends ApiController
             $user->name = $request->get('name');
             $user->email = $request->get('email');
             $user->password = Hash::make($request->get('password'));
-            $user->email_verified_at = Carbon::now();
+            $user->remember_token = Str::random(10);
+            //$user->email_verified_at = Carbon::now();
+
             $user->save();
 
+            event(new Registered($user)); //trimite automat um mail la adresa setata pt verificare
             $token = $user->createToken('Practica');
+
 
             return $this->sendResponse([
                 'token' => $token->plainTextToken,
@@ -96,48 +100,75 @@ class UserController extends ApiController
         }
     }
 
-
     public function forgotPassword(Request $request)
     {
-        $request->validate(['email' => 'required|email']);
+        try {
+            $request->validate(['email' => 'required|email']);
 
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+            $status = Password::sendResetLink(
+                $request->only('email')
+            );
 
-        return $status === Password::RESET_LINK_SENT
-            ? back()->with(['status' => __($status)])
-            : back()->withErrors(['email' => __($status)]);
-    }
+            return $status === Password::RESET_LINK_SENT
+                ? back()->with(['status' => __($status)])
+                : back()->withErrors(['email' => __($status)]);
+        } catch (Exception $exception) {
+            Log::error($exception);
 
-    public function passwordToken($token)
-    {
-        return $token;
+            return $this->sendError('Something went wrong, please contact administrator!', [], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     public function resetPassword(Request $request)
     {
-        $request->validate([
-            'token' => 'required',
-            'email' => 'required|email',
-            'password' => 'required|confirmed',
-        ]);
+        try {
+            $request->validate([
+                'token' => 'required',
+                'email' => 'required|email',
+                'password' => 'required|confirmed',
+            ]);
 
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function ($user, $password) {
-                $user->forceFill([
-                    'password' => Hash::make($password)
-                ])->setRememberToken(Str::random(10));
+            $status = Password::reset(
+                $request->only('email', 'password', 'password_confirmation', 'token'),
+                function ($user, $password) {
+                    $user->forceFill([
+                        'password' => Hash::make($password)
+                    ])->setRememberToken(Str::random(10));
 
-                $user->save();
+                    $user->save();
 
-                event(new PasswordReset($user));
-            }
-        );
+                    event(new PasswordReset($user));
+                }
+            );
 
-        return $status === Password::PASSWORD_RESET
-            ? redirect()->route('/login')->with('status', __($status))
-            : back()->withErrors(['email' => [__($status)]]);
+            return $status === Password::PASSWORD_RESET
+                ? redirect()->route('/login')->with('status', __($status))
+                : back()->withErrors(['email' => [__($status)]]);
+        } catch (Exception $exception) {
+            Log::error($exception);
+
+            return $this->sendError('Something went wrong, please contact administrator!', [], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public function verifyEmail(EmailVerificationRequest $request)
+    {
+        $request->fulfill();
+        return $this->sendResponse($request->toArray());
+    }
+
+    public function sendVerificationEmail(Request $request)
+    {
+        try {
+            $request->user()->sendEmailVerificationNotification();
+
+            return $this->sendResponse([
+                'message' => 'Verification link sent!'
+            ]);
+        } catch (Exception $exception) {
+            Log::error($exception);
+
+            return $this->sendError('Something went wrong, please contact administrator!', [], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }
