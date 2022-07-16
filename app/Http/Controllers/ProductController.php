@@ -8,6 +8,7 @@ use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -66,6 +67,36 @@ class ProductController extends ApiController
         }
     }
 
+    public function getAllProductsForCategory($categoryId)
+    {
+        $products = Product::where('category_id', $categoryId)
+            ->orWhereHas('category', function ($query) use ($categoryId) {
+                $query->where('parent_id', $categoryId)
+                    ->orWhereHas('parent', function ($query) use ($categoryId) {
+                        $query->where('parent_id', $categoryId);
+                    });
+            })->get();
+
+        //        $categories = [$categoryId];
+        //
+        //        $category = Category::find($categoryId);
+        //
+        //        if (count($category->childs) > 0) {
+        //            foreach ($category->childs as $subCategory) {
+        //                $categories[] = $subCategory->id;
+        //
+        //                if (count($subCategory->childs) > 0) {
+        //                    foreach ($subCategory->childs as $subSubCategory) {
+        //                        $categories[] = $subSubCategory->id;
+        //                    }
+        //                }
+        //            }
+        //        }
+        //
+        //        $products = Product::whereIn('category_id', $categories)->get();
+
+        return $products->toArray();
+    }
 
     public function add(Request $request): JsonResponse
     {
@@ -110,35 +141,92 @@ class ProductController extends ApiController
         }
     }
 
-
-    public function getAllProductsForCategory($categoryId)
+    public function get($id): JsonResponse
     {
-        $products = Product::where('category_id', $categoryId)
-            ->orWhereHas('category', function ($query) use ($categoryId) {
-                $query->where('parent_id', $categoryId)
-                    ->orWhereHas('parent', function ($query) use ($categoryId) {
-                        $query->where('parent_id', $categoryId);
-                    });
-            })->get();
+        try {
+            $product = Product::find($id);
 
-        //        $categories = [$categoryId];
-        //
-        //        $category = Category::find($categoryId);
-        //
-        //        if (count($category->childs) > 0) {
-        //            foreach ($category->childs as $subCategory) {
-        //                $categories[] = $subCategory->id;
-        //
-        //                if (count($subCategory->childs) > 0) {
-        //                    foreach ($subCategory->childs as $subSubCategory) {
-        //                        $categories[] = $subSubCategory->id;
-        //                    }
-        //                }
-        //            }
-        //        }
-        //
-        //        $products = Product::whereIn('category_id', $categories)->get();
+            if (!$product) {
+                return $this->sendError('Product not found!', [], Response::HTTP_NOT_FOUND);
+            }
 
-        return $products->toArray();
+            return $this->sendResponse($product->toArray());
+        } catch (Exception $exception) {
+            Log::error($exception);
+
+            return $this->sendError('Something went wrong, please contact administrator!', [], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
+    public function update($id, Request $request): JsonResponse
+    {
+        try {
+            $product = Product::find($id);
+
+            if (!$product) {
+                return $this->sendError('Product not found!', [], Response::HTTP_NOT_FOUND);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|max:100',
+                'description' => 'required|max:200',
+                'quantity' => 'required|numeric|between:0,9999',
+                'category_id' => 'required|exists:categories,id',
+                'price' => 'required|numeric|between:0,999999.99',
+                'status' => 'required|boolean'
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Bad request!', $validator->errors()->toArray());
+            }
+
+            $product->name = request('name');
+            $product->description = request('description');
+            $product->quantity = request('quantity');
+            $product->category_id = request('category_id');
+            $product->price = request('price');
+            $product->status = request('status');
+            if ($request->has('image')) {
+                $file = $request->file('image');
+
+                $filename = 'P' . time() . '.' . $file->getClientOriginalExtension();
+
+                $path = 'products/';
+
+                Storage::putFileAs($path, $file, $filename);
+
+                $product->image = $path . $filename;
+            }
+            $product->save();
+            return $this->sendResponse($product->toArray());
+        } catch (Exception $exception) {
+            Log::error($exception);
+
+            return $this->sendError('Something went wrong, please contact administrator!', [$exception], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public function delete($id): JsonResponse
+    {
+        try {
+            $product = Product::find($id);
+
+            if (!$product) {
+                return $this->sendError('Product not found!', [], Response::HTTP_NOT_FOUND);
+            }
+
+            DB::beginTransaction();
+
+            $product->delete();
+
+            DB::commit();
+
+            return $this->sendResponse([], Response::HTTP_NO_CONTENT);
+        } catch (Exception $exception) {
+            Log::error($exception);
+
+            return $this->sendError('Something went wrong, please contact administrator!', [], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }

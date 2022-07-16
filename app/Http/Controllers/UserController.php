@@ -30,7 +30,7 @@ class UserController extends ApiController
             ]);
 
             if ($validator->fails()) {
-                return $this->sendError('Bad request!', $validator->messages()->toArray());
+                return $this->sendError('Bad request!', $validator->errors()->toArray());
             }
 
             $error = false;
