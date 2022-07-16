@@ -17,8 +17,16 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::post('/login', [UserController::class, 'login']);
-Route::post('/register', [UserController::class, 'register']);
+
+Route::middleware(['guest'])->group(function () {
+    Route::post('/login', [UserController::class, 'login']);
+    Route::post('/register', [UserController::class, 'register']);
+    Route::post('/forgot-password', [UserController::class, 'forgotPassword'])->name('password.email');
+    Route::get('/reset-password/{token}', [UserController::class, 'passwordToken'])->name('password.reset');
+    Route::post('/reset-password', [UserController::class, 'resetPassword'])->name('password.update');
+});
+
+
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/user', function (Request $request) {

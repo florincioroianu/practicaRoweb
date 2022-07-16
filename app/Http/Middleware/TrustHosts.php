@@ -17,6 +17,7 @@ class TrustHosts extends Middleware
     public function hosts()
     {
         return [
+            'practica.local',
             $this->allSubdomainsOfApplicationUrl(),
         ];
     }
